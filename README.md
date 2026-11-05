@@ -38,9 +38,34 @@ Storage is a JSON file (no database bill). Hosting options at $0: run locally an
 ephemeral disks, so the file store resets on redeploy; fine for a demo. Distribute the Flutter app as an APK
 via GitHub Releases (Play Store needs a one-time $25 fee, so skip it).
 
-## Status / roadmap
-- [x] agent loop, tools, unit tests, eval harness
-- [x] free LLM providers (Groq/Gemini/Ollama), file store, Dockerfile
-- [ ] free deploy + public demo URL
-- [ ] Flutter Doc Scanner integration, APK release on GitHub
-- [ ] grow eval set to 30-50 cases, record results per model
+## API
+| Route | What it does |
+|---|---|
+| `POST /v1/receipts` `{"ocr_text": "..."}` | agent cleans, de-duplicates and saves a receipt |
+| `POST /v1/ask` `{"question": "..."}` | agent answers using the query tools |
+| `GET /v1/receipts?category=food&from=2026-10-01` | list saved receipts |
+| `GET /healthz` | health check |
+
+Set `API_KEY` to require an `X-API-Key` header, and `CORS_ORIGIN` for browser clients.
+`flutter_client/receipt_agent_client.dart` is a small Dart client for the Doc Scanner app.
+
+## Eval
+31 labeled cases (clean, noisy OCR, multiple date formats, and inputs that must be rejected).
+
+    LLM_API_KEY=... go run ./cmd/eval -sleep 3s -out RESULTS.md
+
+`-sleep` avoids free-tier rate limits. CI runs `go vet` and `go test -race` on every push.
+
+## Deploy for free
+`render.yaml` is a Render blueprint (free plan). Set `LLM_API_KEY` and `API_KEY` in the dashboard.
+Free hosts have an ephemeral disk, so saved receipts reset on redeploy.
+
+## Status
+- [x] agent loop, tools, unit tests, CI
+- [x] free LLM providers (Groq / Gemini / Ollama), file store
+- [x] HTTP API with auth, CORS and tests; Dockerfile and Render blueprint
+- [x] 31-case eval set, markdown results output
+- [x] Dart client for Flutter
+- [ ] publish eval results in RESULTS.md (run the eval with a real key)
+- [ ] wire the Dart client into Doc Scanner
+- [ ] public demo URL

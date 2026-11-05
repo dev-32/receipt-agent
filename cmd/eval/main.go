@@ -32,6 +32,8 @@ type Case struct {
 
 func main() {
 	file := flag.String("file", "testdata/receipts.json", "dataset")
+	sleep := flag.Duration("sleep", 0, "pause between cases (free tiers rate-limit; try 3s)")
+	out := flag.String("out", "", "write a markdown results file")
 	flag.Parse()
 	client, model, err := llm.FromEnv()
 	if err != nil {
@@ -48,8 +50,12 @@ func main() {
 	}
 
 	var pass, tokIn, tokOut int
+	var report strings.Builder
 	var totalDur time.Duration
-	for _, c := range cases {
+	for i, c := range cases {
+		if i > 0 && *sleep > 0 {
+			time.Sleep(*sleep)
+		}
 		st := store.NewMemory()
 		ag := &agent.Agent{LLM: client, Tools: tools.NewRegistry(st)}
 		start := time.Now()
@@ -57,6 +63,7 @@ func main() {
 		totalDur += time.Since(start)
 		if err != nil {
 			fmt.Printf("FAIL %-20s error: %v\n", c.Name, err)
+			fmt.Fprintf(&report, "| %s | FAIL | error: %v |\n", c.Name, err)
 			continue
 		}
 		tokIn += res.InputTokens
@@ -87,12 +94,18 @@ func main() {
 		if len(problems) == 0 {
 			pass++
 			fmt.Printf("PASS %-20s turns=%d\n", c.Name, res.Turns)
+			fmt.Fprintf(&report, "| %s | PASS | |\n", c.Name)
 		} else {
 			fmt.Printf("FAIL %-20s %s\n", c.Name, strings.Join(problems, "; "))
+			fmt.Fprintf(&report, "| %s | FAIL | %s |\n", c.Name, strings.Join(problems, "; "))
 		}
 	}
 	fmt.Printf("\n%d/%d passed | model=%s | tokens in=%d out=%d | avg latency %s\n",
 		pass, len(cases), model, tokIn, tokOut, (totalDur / time.Duration(len(cases))).Round(time.Millisecond))
+	if *out != "" {
+		head := fmt.Sprintf("# Eval results\n\nModel: `%s`  \nPassed: **%d/%d**  \nTokens in/out: %d/%d\n\n| case | result | notes |\n|---|---|---|\n", model, pass, len(cases), tokIn, tokOut)
+		os.WriteFile(*out, []byte(head+report.String()), 0o644)
+	}
 	if pass != len(cases) {
 		os.Exit(1)
 	}
